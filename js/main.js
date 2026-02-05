@@ -6,10 +6,21 @@ const searchBtn = document.getElementById("search-btn");
 const errorMsg = document.getElementById("error-msg");
 const questionsContainer = document.getElementById("questions-container");
 
-// Функция для получения данных с прокси (вынесена отдельно для удобства)
+/**
+ * Валидатор UUID формата xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+ */
+function isValidUUID(uuid) {
+    const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
+}
+
+/**
+ * Функция для получения данных с прокси с механизмом Retry
+ */
 async function fetchQuizData(uuid) {
     const proxyUrl = "https://api.allorigins.win/get?url=";
-    // Добавляем случайный параметр в конец, чтобы прокси не выдавал старый кэш
+    // nocache нужен, чтобы прокси не отдавал старые ошибки из своего кэша
     const targetUrl = encodeURIComponent(
         `https://create.kahoot.it/rest/kahoots/${uuid}?nocache=${Date.now()}`,
     );
@@ -19,44 +30,59 @@ async function fetchQuizData(uuid) {
 
     const wrapper = await response.json();
 
-    // Проверка: иногда прокси возвращает ответ, но contents внутри пустой (null)
     if (!wrapper.contents) {
         throw new Error("Empty contents from proxy");
     }
 
-    return JSON.parse(wrapper.contents);
+    const data = JSON.parse(wrapper.contents);
+
+    // Если UUID валиден, но квиза нет (например, удален), Kahoot вернет объект без вопросов
+    if (!data.questions || data.questions.length === 0) {
+        throw new Error("Quiz has no questions or is private");
+    }
+
+    return data;
 }
 
 searchBtn.addEventListener("click", async () => {
     const uuid = uuidInput.value.trim();
+
+    // 1. Проверка на пустоту
     if (!uuid) return showError("Введите UUID");
 
+    // 2. Валидация формата (Мгновенная проверка)
+    if (!isValidUUID(uuid)) {
+        return showError("Неверный формат UUID. Проверьте дефисы и символы.");
+    }
+
+    // Если проверки пройдены, начинаем "взлом"
     loaderScreen.classList.remove("hidden");
     searchBtn.disabled = true;
-    errorMsg.textContent = ""; // Сбрасываем старые ошибки
+    errorMsg.textContent = "";
 
     try {
         let data;
         try {
-            // Первая попытка
+            // Первая попытка загрузки
             data = await fetchQuizData(uuid);
         } catch (firstTryErr) {
-            console.warn(
-                "Первая попытка не удалась, пробую еще раз...",
-                firstTryErr,
-            );
-            // Вторая попытка (Retry) через 500мс
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // Если квиз приватный, retry не поможет — сразу кидаем ошибку
+            if (firstTryErr.message === "Quiz has no questions or is private")
+                throw firstTryErr;
+
+            console.warn("Попытка 1 провалена. Запуск Retry...");
+            await new Promise((resolve) => setTimeout(resolve, 600));
             data = await fetchQuizData(uuid);
         }
 
-        // Если дошли сюда — данные получены
+        // Подготовка интерфейса перед показом
         if (typeof clearHighlights === "function") clearHighlights();
         const queryInput = document.getElementById("query-input");
         if (queryInput) queryInput.value = "";
 
         renderQuiz(data);
 
+        // Красивый выход из лоадера
         setTimeout(() => {
             loaderScreen.classList.add("hidden");
             authScreen.classList.add("hidden");
@@ -65,22 +91,35 @@ searchBtn.addEventListener("click", async () => {
             searchBtn.disabled = false;
         }, 1200);
     } catch (err) {
-        console.error("Ошибка загрузки:", err);
+        console.error("Critical Error:", err);
         loaderScreen.classList.add("hidden");
-        showError("Ошибка доступа или неверный UUID");
+
+        if (err.message === "Quiz has no questions or is private") {
+            showError("Квиз пуст, удален или защищен настройками приватности");
+        } else {
+            showError("Ошибка соединения. Попробуйте еще раз через секунду.");
+        }
+
         searchBtn.disabled = false;
     }
 });
 
+/**
+ * Рендеринг вопросов в аккордеон
+ */
 function renderQuiz(data) {
     document.getElementById("quiz-title").textContent =
         data.title || "Kahoot Quiz";
     questionsContainer.innerHTML = "";
 
-    if (!data.questions) return;
-
     data.questions.forEach((q, index) => {
-        if (q.type !== "quiz" && q.type !== "multiple_select_quiz") return;
+        // Пропускаем информационные слайды без вопросов
+        if (
+            q.type !== "quiz" &&
+            q.type !== "multiple_select_quiz" &&
+            q.type !== "true_false"
+        )
+            return;
 
         const item = document.createElement("div");
         item.className = "accordion-item";
@@ -89,7 +128,7 @@ function renderQuiz(data) {
             .map(
                 (choice) => `
             <div class="answer-option ${choice.correct ? "correct" : ""}">
-                ${choice.answer}
+                ${choice.answer || (choice.type === "true" ? "ПРАВДА" : "ЛОЖЬ")}
                 ${choice.correct ? '<b style="float:right">✓</b>' : ""}
             </div>
         `,
@@ -108,16 +147,26 @@ function renderQuiz(data) {
         questionsContainer.appendChild(item);
     });
 
+    // Инициализируем обработчики кликов для новых элементов
     if (typeof initAccordion === "function") initAccordion();
 }
 
+/**
+ * Визуальное отображение ошибки
+ */
 function showError(text) {
     errorMsg.textContent = text;
     uuidInput.style.borderColor = "var(--neon-pink)";
+    // Тряска инпута при ошибке (можно добавить в CSS анимацию shake)
+    uuidInput.classList.add("shake");
+    setTimeout(() => uuidInput.classList.remove("shake"), 500);
 }
 
 document.getElementById("back-btn").addEventListener("click", () => {
     contentScreen.classList.add("hidden");
     authScreen.classList.remove("hidden");
     authScreen.style.opacity = "1";
+    uuidInput.value = "";
+    errorMsg.textContent = "";
+    uuidInput.style.borderColor = "var(--neon-blue)";
 });
