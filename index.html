@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/ico+xml" href="https://assets-cdn.kahoot.it/builder/v2/favicon.ico">
+  <title>Kahoot Explorer | Neon Edition</title>
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Kahoot Hack">
+  <meta property="og:title" content="Flayzex's Kahoot Hack">
+  <meta property="og:description"
+    content="The baddest Kahoot answer finder on the market. Get answers for any quiz in seconds!">
+  <meta property="og:url" content="https://kahoot-hack.flayzex.org/">
+  <meta property="og:image" content="https://kahoot-hack.flayzex.org/images/meta-image.png">
+
+  <!-- Для Telegram / Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+</head>
+
+<body>
+
+  <div id="auth-screen" class="fullscreen-overlay">
+    <div class="neon-card">
+      <h1>KAHOOT <span class="neon-text">HACK</span></h1>
+      <p>Введите UUID квиза для получения ответов</p>
+      <div class="input-group">
+        <input type="text" id="uuid-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+        <button id="search-btn">НАЙТИ КВИЗ</button>
+      </div>
+      <p id="error-msg" class="error-text"></p>
+    </div>
+  </div>
+
+  <div id="loader-screen" class="fullscreen-overlay hidden">
+    <div class="loader-content">
+      <div class="scanner-ring"></div>
+      <div class="loader-text">SCANNING <span class="dots">...</span></div>
+    </div>
+  </div>
+
+  <main id="content-screen" class="hidden">
+    <header>
+      <div class="top-nav">
+        <button id="back-btn">← Назад</button>
+        <h2 id="quiz-title">Название квиза</h2>
+      </div>
+
+      <div class="search-bar">
+        <div class="input-wrapper">
+          <input type="text" id="query-input" placeholder="Поиск по вопросу или ответу...">
+          <span id="match-counter" class="hidden">0 / 0</span>
+        </div>
+        <button id="find-btn">Найти</button>
+      </div>
+    </header>
+
+    <div id="questions-container">
+    </div>
+  </main>
+
+  <script src="js/accordion.js"></script>
+  <script src="js/search.js"></script>
+  <script src="js/main.js"></script>
+</body>
+
+</html>
