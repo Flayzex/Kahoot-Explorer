@@ -7,7 +7,7 @@ const errorMsg = document.getElementById("error-msg");
 const questionsContainer = document.getElementById("questions-container");
 
 /**
- * Валидатор UUID формата xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+ * Валидатор UUID
  */
 function isValidUUID(uuid) {
     const uuidRegex =
@@ -16,96 +16,88 @@ function isValidUUID(uuid) {
 }
 
 /**
- * Функция для получения данных с прокси с механизмом Retry
+ * Улучшенная функция получения данных с автоматическими повторами (Retries)
  */
-async function fetchQuizData(uuid) {
+async function fetchQuizWithRetry(uuid, retries = 3) {
     const proxyUrl = "https://api.allorigins.win/get?url=";
-    // nocache нужен, чтобы прокси не отдавал старые ошибки из своего кэша
     const targetUrl = encodeURIComponent(
         `https://create.kahoot.it/rest/kahoots/${uuid}?nocache=${Date.now()}`,
     );
 
-    const response = await fetch(`${proxyUrl}${targetUrl}`);
-    if (!response.ok) throw new Error("Network response was not ok");
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(`${proxyUrl}${targetUrl}`);
+            if (!response.ok) throw new Error("Network issues");
 
-    const wrapper = await response.json();
+            const wrapper = await response.json();
+            if (!wrapper.contents) throw new Error("Empty contents");
 
-    if (!wrapper.contents) {
-        throw new Error("Empty contents from proxy");
+            const data = JSON.parse(wrapper.contents);
+
+            // Если Kahoot вернул ответ, но там нет вопросов (квиз приватный/удален)
+            // Тут ретрай не поможет, поэтому выходим сразу
+            if (!data.questions || data.questions.length === 0) {
+                return { success: false, error: "empty_quiz" };
+            }
+
+            return { success: true, data: data };
+        } catch (err) {
+            console.warn(`Попытка ${i + 1} провалилась...`);
+            if (i === retries - 1) throw err; // Если последняя попытка — пробрасываем ошибку выше
+            await new Promise((resolve) => setTimeout(resolve, 800)); // Пауза перед повтором
+        }
     }
-
-    const data = JSON.parse(wrapper.contents);
-
-    // Если UUID валиден, но квиза нет (например, удален), Kahoot вернет объект без вопросов
-    if (!data.questions || data.questions.length === 0) {
-        throw new Error("Quiz has no questions or is private");
-    }
-
-    return data;
 }
 
-searchBtn.addEventListener("click", async () => {
+/**
+ * Логика поиска
+ */
+async function handleSearch() {
     const uuid = uuidInput.value.trim();
 
-    // 1. Проверка на пустоту
     if (!uuid) return showError("Введите UUID");
+    if (!isValidUUID(uuid)) return showError("Неверный формат UUID");
 
-    // 2. Валидация формата (Мгновенная проверка)
-    if (!isValidUUID(uuid)) {
-        return showError("Неверный формат UUID. Проверьте дефисы и символы.");
-    }
-
-    // Если проверки пройдены, начинаем "взлом"
     loaderScreen.classList.remove("hidden");
     searchBtn.disabled = true;
     errorMsg.textContent = "";
 
     try {
-        let data;
-        try {
-            // Первая попытка загрузки
-            data = await fetchQuizData(uuid);
-        } catch (firstTryErr) {
-            // Если квиз приватный, retry не поможет — сразу кидаем ошибку
-            if (firstTryErr.message === "Quiz has no questions or is private")
-                throw firstTryErr;
+        const result = await fetchQuizWithRetry(uuid);
 
-            console.warn("Попытка 1 провалена. Запуск Retry...");
-            await new Promise((resolve) => setTimeout(resolve, 600));
-            data = await fetchQuizData(uuid);
+        if (!result.success) {
+            throw new Error(result.error);
         }
 
-        // Подготовка интерфейса перед показом
+        // Очищаем прошлые результаты поиска (из search.js)
         if (typeof clearHighlights === "function") clearHighlights();
         const queryInput = document.getElementById("query-input");
         if (queryInput) queryInput.value = "";
 
-        renderQuiz(data);
+        renderQuiz(result.data);
 
-        // Красивый выход из лоадера
+        // Финальная анимация перехода
         setTimeout(() => {
             loaderScreen.classList.add("hidden");
             authScreen.classList.add("hidden");
             contentScreen.classList.remove("hidden");
             authScreen.style.opacity = "0";
             searchBtn.disabled = false;
-        }, 1200);
+        }, 1000);
     } catch (err) {
-        console.error("Critical Error:", err);
         loaderScreen.classList.add("hidden");
-
-        if (err.message === "Quiz has no questions or is private") {
-            showError("Квиз пуст, удален или защищен настройками приватности");
-        } else {
-            showError("Ошибка соединения. Попробуйте еще раз через секунду.");
-        }
-
         searchBtn.disabled = false;
+
+        if (err.message === "empty_quiz") {
+            showError("Квиз пуст или защищен приватностью");
+        } else {
+            showError("Ошибка доступа. Попробуйте еще раз.");
+        }
     }
-});
+}
 
 /**
- * Рендеринг вопросов в аккордеон
+ * Рендеринг интерфейса
  */
 function renderQuiz(data) {
     document.getElementById("quiz-title").textContent =
@@ -113,12 +105,7 @@ function renderQuiz(data) {
     questionsContainer.innerHTML = "";
 
     data.questions.forEach((q, index) => {
-        // Пропускаем информационные слайды без вопросов
-        if (
-            q.type !== "quiz" &&
-            q.type !== "multiple_select_quiz" &&
-            q.type !== "true_false"
-        )
+        if (!["quiz", "multiple_select_quiz", "true_false"].includes(q.type))
             return;
 
         const item = document.createElement("div");
@@ -127,11 +114,11 @@ function renderQuiz(data) {
         const choicesHtml = q.choices
             .map(
                 (choice) => `
-            <div class="answer-option ${choice.correct ? "correct" : ""}">
-                ${choice.answer || (choice.type === "true" ? "ПРАВДА" : "ЛОЖЬ")}
-                ${choice.correct ? '<b style="float:right">✓</b>' : ""}
-            </div>
-        `,
+                <div class="answer-option ${choice.correct ? "correct" : ""}">
+                    ${choice.answer || (choice.type === "true" ? "ПРАВДА" : "ЛОЖЬ")}
+                    ${choice.correct ? '<b style="float:right">✓</b>' : ""}
+                </div>
+            `,
             )
             .join("");
 
@@ -147,20 +134,25 @@ function renderQuiz(data) {
         questionsContainer.appendChild(item);
     });
 
-    // Инициализируем обработчики кликов для новых элементов
     if (typeof initAccordion === "function") initAccordion();
 }
 
-/**
- * Визуальное отображение ошибки
- */
 function showError(text) {
     errorMsg.textContent = text;
     uuidInput.style.borderColor = "var(--neon-pink)";
-    // Тряска инпута при ошибке (можно добавить в CSS анимацию shake)
-    uuidInput.classList.add("shake");
-    setTimeout(() => uuidInput.classList.remove("shake"), 500);
 }
+
+/**
+ * Инициализация событий
+ */
+searchBtn.addEventListener("click", handleSearch);
+
+uuidInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        handleSearch();
+    }
+});
 
 document.getElementById("back-btn").addEventListener("click", () => {
     contentScreen.classList.add("hidden");
