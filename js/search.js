@@ -32,22 +32,25 @@ function performSearch() {
 
     if (query.length < 1) return;
 
-    // Рекурсивный поиск во всех текстовых узлах
-    const walker = document.createTreeWalker(
-        container,
-        NodeFilter.SHOW_TEXT,
-        null,
-        false
-    );
-
-    let node;
+    // Рекурсивный поиск только в заголовках вопросов
+    const headers = container.querySelectorAll(".question-header span:first-child");
     const nodesToReplace = [];
 
-    while ((node = walker.nextNode())) {
-        if (node.textContent.toLowerCase().includes(query)) {
-            nodesToReplace.push(node);
+    headers.forEach(header => {
+        const walker = document.createTreeWalker(
+            header,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+
+        let node;
+        while ((node = walker.nextNode())) {
+            if (node.textContent.toLowerCase().includes(query)) {
+                nodesToReplace.push(node);
+            }
         }
-    }
+    });
 
     nodesToReplace.forEach((node) => {
         const parent = node.parentNode;

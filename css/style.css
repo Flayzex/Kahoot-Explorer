@@ -228,6 +228,52 @@ button:hover {
     background: rgba(255, 255, 255, 0.05);
     display: flex;
     justify-content: space-between;
+    align-items: center;
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.hide-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 0, 255, 0.3);
+    color: var(--neon-pink);
+    padding: 2px 8px;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    opacity: 0.5;
+}
+
+.hide-btn:hover {
+    opacity: 1;
+    background: rgba(255, 0, 255, 0.1);
+    box-shadow: 0 0 10px var(--neon-pink);
+}
+
+.hidden-placeholder {
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.02);
+    font-style: italic;
+    color: #666;
+}
+
+.restore-btn {
+    background: transparent;
+    border: 1px solid var(--neon-blue);
+    color: var(--neon-blue);
+    padding: 5px 15px;
+    font-size: 0.8rem;
+}
+
+.restore-btn:hover {
+    background: rgba(0, 242, 255, 0.1);
+    box-shadow: 0 0 10px var(--neon-blue);
 }
 
 .answers-list {

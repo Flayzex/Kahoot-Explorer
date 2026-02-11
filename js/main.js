@@ -129,12 +129,57 @@ function renderQuiz(data) {
         item.innerHTML = `
             <div class="question-header">
                 <span><b>${index + 1}.</b> ${q.question}</span>
-                <span class="icon">▼</span>
+                <div class="header-controls">
+                    <button class="hide-btn" title="Скрыть">✕</button>
+                    <span class="icon">▼</span>
+                </div>
             </div>
             <div class="answers-list">
                 ${choicesHtml}
             </div>
+            <div class="hidden-placeholder hidden">
+                <span>Вопрос №${index + 1} скрыт</span>
+                <button class="restore-btn">Показать</button>
+            </div>
         `;
+
+        const hideBtn = item.querySelector(".hide-btn");
+        const restoreBtn = item.querySelector(".restore-btn");
+        const qHeader = item.querySelector(".question-header");
+        const qAnswers = item.querySelector(".answers-list");
+        const placeholder = item.querySelector(".hidden-placeholder");
+
+        item.dataset.index = index; // Сохраняем оригинальный индекс для сортировки
+
+        hideBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            qHeader.classList.add("hidden");
+            qAnswers.style.maxHeight = null;
+            item.classList.remove("active");
+            placeholder.classList.remove("hidden");
+            item.classList.add("is-hidden");
+
+            // Перемещаем в конец контейнера
+            questionsContainer.appendChild(item);
+        });
+
+        restoreBtn.addEventListener("click", () => {
+            qHeader.classList.remove("hidden");
+            placeholder.classList.add("hidden");
+            item.classList.remove("is-hidden");
+
+            // Возвращаем на правильное место по индексу
+            const siblings = Array.from(questionsContainer.children);
+            const nextSibling = siblings.find(sib => {
+                return !sib.classList.contains("is-hidden") && parseInt(sib.dataset.index) > index;
+            }) || siblings.find(sib => sib.classList.contains("is-hidden"));
+
+            if (nextSibling) {
+                questionsContainer.insertBefore(item, nextSibling);
+            } else {
+                questionsContainer.appendChild(item);
+            }
+        });
 
         fragment.appendChild(item);
     });
